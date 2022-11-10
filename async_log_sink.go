@@ -13,16 +13,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/kyle-hy/zlog/chanmgr"
 	"go.uber.org/zap"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
-	maxChanSize = 256 * 1024
-	maxFileSize = 4 * 1024 // 4GBytes
-	maxBackups  = 10
-	maxAge      = 7
+	maxChanSize = 256 * 1024 // 256个管道，每个管道容量为1024个[]byte，共256*1024个切片消息
+)
+
+var (
+	loggerList loggerMap
 )
 
 // Flusher .
@@ -41,48 +41,75 @@ type WriteCloseFlusher struct {
 type AsyncLogSink struct {
 	closed     bool
 	failCounts uint64
-	chanMgr    *chanmgr.ChanMgr
+	filepath   string
+	chanMgr    *ChanMgr
 	writer     *WriteCloseFlusher
 	ctx        context.Context
 	cancel     context.CancelFunc
 	wg         sync.WaitGroup
 }
 
+type loggerMap struct {
+	sync.Mutex
+	sink map[string]zap.Sink
+	opts map[string]*Options
+}
+
 // AsyncLoggerSink 定义工厂函数
 func AsyncLoggerSink(url *url.URL) (sink zap.Sink, err error) {
 	var writer io.WriteCloser
-	filePath := getLogFilePath(&defaultOptions)
 
-	if defaultOptions.rotate {
+	loggerList.Lock()
+	defer loggerList.Unlock()
+
+	v, ok := loggerList.sink[url.String()]
+	if ok {
+		return v, nil
+	}
+
+	var opts *Options
+	opts, ok = loggerList.opts[url.String()]
+	if !ok {
+		opts = &defaultOptions
+	}
+
+	filePath := opts.logPath
+	if filePath == "" {
+		filePath = getLogFilePath(&defaultOptions)
+	}
+
+	if opts.rotate {
 		writer = &lumberjack.Logger{
 			Filename:   filePath,
-			Compress:   true,
+			Compress:   opts.compress,
 			LocalTime:  true,
-			MaxSize:    maxFileSize,
-			MaxBackups: maxBackups,
-			MaxAge:     maxAge,
+			MaxSize:    opts.maxFileSize,
+			MaxBackups: opts.maxBackups,
+			MaxAge:     opts.maxAge,
 		}
 	} else {
 		err := os.MkdirAll(filepath.Dir(filePath), 0755)
 		if err != nil {
 			return nil, err
 		}
-		openFlag := os.O_CREATE | os.O_WRONLY | os.O_APPEND // 使用第三方程序rotate的话，用append模式打开，否则会形成空洞的大文件
+		// 使用第三方程序rotate的话，用append模式打开，否则会形成空洞的大文件
+		openFlag := os.O_CREATE | os.O_WRONLY | os.O_APPEND
 		writer, err = os.OpenFile(filePath, openFlag, os.FileMode(0644))
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	bw := bufio.NewWriterSize(writer, defaultOptions.bufioSize)
+	bw := bufio.NewWriterSize(writer, opts.bufioSize)
 	wc := &WriteCloseFlusher{
 		Writer:  bw,
 		Flusher: bw,
 		Closer:  writer,
 	}
 	c := &AsyncLogSink{
-		writer:  wc,
-		chanMgr: chanmgr.NewChanMgr(256, maxChanSize/256),
+		filepath: filePath,
+		writer:   wc,
+		chanMgr:  NewChanMgr(256, maxChanSize/256),
 	}
 
 	c.ctx, c.cancel = context.WithCancel(context.Background())
@@ -92,10 +119,11 @@ func AsyncLoggerSink(url *url.URL) (sink zap.Sink, err error) {
 		c.wg.Done()
 	}()
 
+	loggerList.sink[url.String()] = c
 	return c, nil
 }
 
-// Sync 定义Sync方法以实现Sink接口
+// Sync 调用后日志文件将关闭，因文件io只可AsyncLogSink::loop协程中使用，否则引发线程同步问题
 func (c *AsyncLogSink) Sync() error {
 	c.Close()
 	return nil
@@ -114,6 +142,11 @@ func (c *AsyncLogSink) Close() error {
 	}
 	c.wg.Wait() // wait until all msgs have been consumed
 	c.writer.Close()
+
+	loggerList.Lock()
+	defer loggerList.Unlock()
+	delete(loggerList.sink, c.filepath)
+
 	return nil
 }
 

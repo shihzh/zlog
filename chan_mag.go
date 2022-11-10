@@ -1,4 +1,4 @@
-package chanmgr
+package zlog
 
 import (
 	"sync/atomic"
