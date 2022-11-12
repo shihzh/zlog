@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -52,25 +51,17 @@ type AsyncLogSink struct {
 type loggerMap struct {
 	sync.Mutex
 	sink map[string]zap.Sink
-	opts map[string]*Options
 }
 
-// AsyncLoggerSink 定义工厂函数
-func AsyncLoggerSink(url *url.URL) (sink zap.Sink, err error) {
+func AsyncLoggerSink(opts *Options) (sink zap.Sink, err error) {
 	var writer io.WriteCloser
 
 	loggerList.Lock()
 	defer loggerList.Unlock()
 
-	v, ok := loggerList.sink[url.String()]
+	v, ok := loggerList.sink[opts.logPath]
 	if ok {
 		return v, nil
-	}
-
-	var opts *Options
-	opts, ok = loggerList.opts[url.String()]
-	if !ok {
-		opts = &defaultOptions
 	}
 
 	filePath := opts.logPath
@@ -119,13 +110,12 @@ func AsyncLoggerSink(url *url.URL) (sink zap.Sink, err error) {
 		c.wg.Done()
 	}()
 
-	loggerList.sink[url.String()] = c
+	loggerList.sink[opts.logPath] = c
 	return c, nil
 }
 
-// Sync 调用后日志文件将关闭，因文件io只可AsyncLogSink::loop协程中使用，否则引发线程同步问题
+// Sync 因文件io只可AsyncLogSink::loop协程中使用，否则引发同步问题
 func (c *AsyncLogSink) Sync() error {
-	c.Close()
 	return nil
 }
 

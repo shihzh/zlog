@@ -13,9 +13,6 @@ var (
 )
 
 func init() {
-	// 将AsyncLoggerSink工厂函数注册到zap中, 自定义协议名为 AsyncLog
-	_ = zap.RegisterSink("AsyncLog", AsyncLoggerSink)
-	loggerList.opts = make(map[string]*Options)
 	loggerList.sink = make(map[string]zap.Sink)
 }
 
@@ -54,44 +51,35 @@ func epochFullTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 
 // newLogger 初始化日志
 func newLogger(opt *Options) (*zap.Logger, error) {
-	var url string
-	if opt.logPath != "" {
-		url = fmt.Sprint("AsyncLog://127.0.0.1/", opt.logPath)
-	} else {
-		url = fmt.Sprint("AsyncLog://127.0.0.1")
-	}
-
-	outPaths := []string{url}
+	outPaths := []string{opt.logPath}
 	if opt.stdout {
 		outPaths = append(outPaths, "stdout")
 	}
 
-	loggerList.Lock()
-	loggerList.opts[url] = opt
-	loggerList.Unlock()
-
-	defer func() {
-		loggerList.Lock()
-		delete(loggerList.opts, url)
-		loggerList.Unlock()
-	}()
-
-	encoder := func() zapcore.EncoderConfig {
-		encoderConfig := zap.NewProductionEncoderConfig()
-		encoderConfig.EncodeTime = epochFullTimeEncoder
-		encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
-		return encoderConfig
-	}()
-
-	config := zap.NewProductionConfig()
-	config.Level = zap.NewAtomicLevelAt(opt.level)
-	config.Encoding = "console"
-	config.EncoderConfig = encoder
-	config.OutputPaths = outPaths
-	config.DisableCaller = opt.disableCaller
-	log, err := config.Build(zap.AddStacktrace(zap.ErrorLevel) /*zap.AddCaller()*/)
+	sink, err := AsyncLoggerSink(opt)
 	if err != nil {
 		return nil, err
 	}
-	return log, nil
+
+	getEncoder := func() zapcore.Encoder {
+		encoderConfig := zap.NewProductionEncoderConfig()
+		encoderConfig.EncodeTime = epochFullTimeEncoder
+		encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
+		return zapcore.NewConsoleEncoder(encoderConfig)
+	}
+	encoder := getEncoder()
+
+	levelEnabler := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
+		return level >= opt.level
+	})
+	core := zapcore.NewCore(encoder, sink, levelEnabler)
+
+	var zapLogger *zap.Logger
+	if opt.disableCaller {
+		zapLogger = zap.New(core)
+	} else {
+		zapLogger = zap.New(core, zap.AddCaller())
+	}
+
+	return zapLogger, nil
 }
