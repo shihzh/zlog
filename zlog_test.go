@@ -17,7 +17,7 @@ func TestDefaultLog(t *testing.T) {
 	logger.Warnf("hello %s", string("Warnf"))
 	logger.Errorf("hello %s", string("Errorf"))
 
-	logger.Sync()
+	time.Sleep(time.Second)
 }
 
 func TestBigMsg(t *testing.T) {
@@ -29,7 +29,7 @@ func TestBigMsg(t *testing.T) {
 	}
 	logger.Infof("hello %s", string(v))
 
-	logger.Sync()
+	time.Sleep(time.Second)
 }
 
 func Test2Logger2file(t *testing.T) {
@@ -59,8 +59,7 @@ func Test2Logger2file(t *testing.T) {
 	logger.Warnf("hello %s", string("Warnf"))
 	logger.Errorf("hello %s", string("Errorf"))
 
-	log.Sync()
-	log1.Sync()
+	time.Sleep(time.Second)
 }
 
 func Test2Logger1file(t *testing.T) {
@@ -90,7 +89,7 @@ func Test2Logger1file(t *testing.T) {
 	logger.Warnf("hello %s", string("Warnf"))
 	logger.Errorf("hello %s", string("Errorf"))
 
-	logger.Sync()
+	time.Sleep(time.Second)
 }
 
 func TestStdout(t *testing.T) {
@@ -104,6 +103,8 @@ func TestStdout(t *testing.T) {
 	logger.Infof("hello %s", string("Infof"))
 	logger.Warnf("hello %s", string("Warnf"))
 	logger.Errorf("hello %s", string("Errorf"))
+
+	time.Sleep(time.Second)
 }
 
 func BenchmarkLog(b *testing.B) { // 4281 ns/op

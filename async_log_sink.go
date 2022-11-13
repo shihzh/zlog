@@ -39,6 +39,7 @@ type WriteCloseFlusher struct {
 // AsyncLogSink 定义一个结构体
 type AsyncLogSink struct {
 	closed     bool
+	stdout     bool
 	failCounts uint64
 	filepath   string
 	chanMgr    *ChanMgr
@@ -98,6 +99,7 @@ func AsyncLoggerSink(opts *Options) (sink zap.Sink, err error) {
 		Closer:  writer,
 	}
 	c := &AsyncLogSink{
+		stdout:   opts.stdout,
 		filepath: filePath,
 		writer:   wc,
 		chanMgr:  NewChanMgr(256, maxChanSize/256),
@@ -194,7 +196,10 @@ func (c *AsyncLogSink) loop() {
 		}
 
 		if len(msg) > 0 {
-			c.writer.Write([]byte(msg))
+			c.writer.Write(msg)
+			if c.stdout {
+				os.Stdout.Write(msg)
+			}
 			msg = nil
 		}
 

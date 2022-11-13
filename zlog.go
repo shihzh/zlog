@@ -51,11 +51,6 @@ func epochFullTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 
 // newLogger 初始化日志
 func newLogger(opt *Options) (*zap.Logger, error) {
-	outPaths := []string{opt.logPath}
-	if opt.stdout {
-		outPaths = append(outPaths, "stdout")
-	}
-
 	sink, err := AsyncLoggerSink(opt)
 	if err != nil {
 		return nil, err
