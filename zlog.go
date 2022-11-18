@@ -34,11 +34,12 @@ func GetDefaultLogger() *zap.Logger {
 
 // NewLogger 初始化日志
 func NewLogger(opts ...Option) (*zap.Logger, error) {
+	options := defaultOptions
 	for _, opt := range opts {
-		opt(&defaultOptions)
+		opt(&options)
 	}
 
-	innerLog, err := newLogger(&defaultOptions)
+	innerLog, err := newLogger(&options)
 	if err != nil {
 		return nil, err
 	}
