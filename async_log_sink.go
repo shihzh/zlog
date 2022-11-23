@@ -178,6 +178,8 @@ func (c *AsyncLogSink) loop() {
 	var msg []byte
 	closed := false
 
+	last := time.Now()
+
 	for {
 		msgChan, idx := c.chanMgr.NextRead()
 		if !closed {
@@ -199,6 +201,9 @@ func (c *AsyncLogSink) loop() {
 			c.writer.Write(msg)
 			if c.stdout {
 				os.Stdout.Write(msg)
+			}
+			if time.Now().Sub(last) > time.Second {
+				c.writer.Flush()
 			}
 			msg = nil
 		}

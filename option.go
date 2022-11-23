@@ -46,7 +46,7 @@ var defaultOptions = Options{
 	maxFileSize:   maxFileSize,
 	maxBackups:    maxBackups,
 	maxAge:        maxAge,
-	bufioSize:     1024 * 8,
+	bufioSize:     256 * 1024,
 }
 
 // 默认文件路径：./log/进程名.log
